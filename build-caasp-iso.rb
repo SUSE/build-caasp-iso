@@ -74,8 +74,12 @@ class BuildService
               "_product:CAASP-dvd5-DVD-x86_64"
   end
 
+  def self.kiwi_filename
+    "CAASP-dvd5-DVD-x86_64.kiwi"
+  end
+
   def self.kiwi_file_path
-    File.join BuildService.iso_project_dir, "CAASP-dvd5-DVD-x86_64.kiwi"
+    File.join BuildService.iso_project_dir, kiwi_filename
   end
 
   def self.generated_kiwi_filename
@@ -109,7 +113,8 @@ class BuildService
     BuildScript.cached_file("_product:CAASP-dvd5-DVD-x86_64.buildinfo") do
       stdout, status = nil, nil
       Dir.chdir(iso_project_dir) do
-        stdout, _, status = exec_command "osc buildinfo images", "Retrieving buildinfo"
+        stdout, _, status = exec_command "osc buildinfo images #{kiwi_filename}",
+                                         "Retrieving buildinfo"
       end
       raise "buildinfo could not be retrieved" unless status.exitstatus.zero?
       stdout
