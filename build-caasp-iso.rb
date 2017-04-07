@@ -130,7 +130,7 @@ class BuildService
       ["obs://#{path["project"]}", path["repository"]]
     end.uniq
     all_paths.each_with_index do |path_info, i|
-      instrepo = Nokogiri::XML::Builder.with(doc.root) do |doc|
+      instrepo = Nokogiri::XML::Builder.with(doc.at_css("instsource")) do |doc|
         doc.instrepo(name: "obsrepository_#{i + 1}", priority: i + 1, local: true) do |instrepo|
           instrepo.source path: File.join(path_info)
         end
