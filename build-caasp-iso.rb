@@ -26,9 +26,9 @@ def log(message, command: false)
   end
 end
 
-def exec_command(command, description = nil)
+def exec_command(command, description = nil, stdin = nil)
   log description, command: true unless description.nil?
-  stdout, stderr, status = Open3.capture3 command
+  stdout, stderr, status = Open3.capture3 command, stdin_data: stdin
   unless description.nil?
     if status.exitstatus.zero?
       puts " success"
