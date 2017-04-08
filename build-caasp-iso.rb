@@ -93,8 +93,8 @@ class BuildService
   def self.checkout
     Dir.chdir(BuildScript.project_dir) do
       unless Dir.exists? "Devel:CASP:1.0:ControllerNode"
-        exec_command "osc co Devel:CASP:1.0:ControllerNode",
-                     "Checking out Devel:CASP:1.0:ControllerNode"
+        exec_command "osc co Devel:CASP:1.0:ControllerNode/_product:CAASP-dvd5-DVD-x86_64",
+                     "Checking out CaaSP DVD product"
       end
     end
   end
