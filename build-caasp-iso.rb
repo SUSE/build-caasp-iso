@@ -93,7 +93,7 @@ class BuildService
   def self.checkout
     Dir.chdir(BuildScript.project_dir) do
       unless Dir.exists? "Devel:CASP:1.0:ControllerNode"
-        exec_command "osc co Devel:CASP:1.0:ControllerNode/_product:CAASP-dvd5-DVD-x86_64",
+        exec_command "osc -A https://api.suse.de co Devel:CASP:1.0:ControllerNode/_product:CAASP-dvd5-DVD-x86_64",
                      "Checking out CaaSP DVD product"
       end
     end
@@ -113,7 +113,7 @@ class BuildService
     BuildScript.cached_file("_product:CAASP-dvd5-DVD-x86_64.buildinfo") do
       stdout, status = nil, nil
       Dir.chdir(iso_project_dir) do
-        stdout, _, status = exec_command "osc buildinfo images #{kiwi_filename}",
+        stdout, _, status = exec_command "osc -A https://api.suse.de buildinfo images #{kiwi_filename}",
                                          "Retrieving buildinfo"
       end
       raise "buildinfo could not be retrieved" unless status.exitstatus.zero?
