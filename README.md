@@ -22,6 +22,18 @@ As of now, the program does not contain arguments or flags, so it's a raw `ruby 
 The first time it will take some time to download and populate the package cache, but it will be
 much faster on the following builds (~ 1 minute for each build after the first one).
 
+## Local configuration
+
+This script wraps [osc](https://en.opensuse.org/openSUSE:OSC) and your `~/.oscrc` file must contain the following entries:
+
+```
+apiurl = https://api.suse.de
+
+[https://api.suse.de]
+user= youruser
+pass= yourpass
+```
+
 ## License
 
 ```
