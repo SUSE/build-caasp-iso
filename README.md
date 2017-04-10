@@ -24,14 +24,13 @@ much faster on the following builds (~ 1 minute for each build after the first o
 
 ## Local configuration
 
-This script wraps [osc](https://en.opensuse.org/openSUSE:OSC) and your `~/.oscrc` file must contain the following entries:
+This script wraps [osc](https://en.opensuse.org/openSUSE:OSC) and your `~/.oscrc` file must contain
+the following entry:
 
 ```
-apiurl = https://api.suse.de
-
 [https://api.suse.de]
-user= youruser
-pass= yourpass
+user=youruser
+pass=yourpass
 ```
 
 ## License
