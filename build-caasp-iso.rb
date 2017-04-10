@@ -26,7 +26,7 @@ def log(message, command: false)
   end
 end
 
-def exec_command(command, description = nil, stdin = nil)
+def exec_command(command:, description: nil, stdin: nil, print_error: false)
   log description, command: true unless description.nil?
   stdout, stderr, status = Open3.capture3 command, stdin_data: stdin
   unless description.nil?
@@ -34,6 +34,13 @@ def exec_command(command, description = nil, stdin = nil)
       puts " success"
     else
       puts " failed (retcode: #{status})"
+      if print_error
+        puts "   > command: #{command}"
+        puts "   > stdout:"
+        puts stdout.strip.gsub /^/, "     | "
+        puts "   > stderr:"
+        puts stderr.strip.gsub /^/, "     | "
+      end
     end
   end
   return stdout, stderr, status
@@ -42,7 +49,7 @@ end
 class BuildScript
   def self.request_sudo
     log "Requesting sudo"
-    exec_command "sudo -v"
+    exec_command command: "sudo -v"
   end
 
   def self.project_dir
@@ -93,8 +100,9 @@ class BuildService
   def self.checkout
     Dir.chdir(BuildScript.project_dir) do
       unless Dir.exists? "Devel:CASP:1.0:ControllerNode"
-        exec_command "osc -A https://api.suse.de co Devel:CASP:1.0:ControllerNode/_product:CAASP-dvd5-DVD-x86_64",
-                     "Checking out CaaSP DVD product"
+        exec_command command: "osc -A https://api.suse.de co Devel:CASP:1.0:ControllerNode/_product:CAASP-dvd5-DVD-x86_64",
+                     description: "Checking out CaaSP DVD product",
+                     print_error: true
       end
     end
   end
@@ -103,18 +111,20 @@ class BuildService
     "/var/tmp/build-root/images-x86_64"
   end
 
-  def self.exec_command_chroot(command, description = nil)
+  def self.exec_command_chroot(command:, description: nil)
     build_images unless Dir.exists? chroot_dir
-    exec_command "osc chroot --root=#{chroot_dir}",
-                 description.nil? ? nil : "(chroot) #{description}", command
+    exec_command command: "osc chroot --root=#{chroot_dir}",
+                 description: description.nil? ? nil : "(chroot) #{description}",
+                 stdin: command
   end
 
   def self.buildinfo
     BuildScript.cached_file("_product:CAASP-dvd5-DVD-x86_64.buildinfo") do
       stdout, status = nil, nil
       Dir.chdir(iso_project_dir) do
-        stdout, _, status = exec_command "osc -A https://api.suse.de buildinfo images #{kiwi_filename}",
-                                         "Retrieving buildinfo"
+        stdout, _, status = exec_command command: "osc -A https://api.suse.de buildinfo images #{kiwi_filename}",
+                                         description: "Retrieving buildinfo",
+                                         print_error: true
       end
       raise "buildinfo could not be retrieved" unless status.exitstatus.zero?
       stdout
@@ -140,8 +150,8 @@ class BuildService
   end
 
   def self.generate_private_key
-    _, _, status = exec_command_chroot "grep ^default-key .gnupg/gpg.conf",
-                                       "Checking if a default-key exists in GPG configuration"
+    _, _, status = exec_command_chroot command: "grep ^default-key .gnupg/gpg.conf",
+                                       description: "Checking if a default-key exists in GPG configuration"
     return if status.exitstatus.zero?
     key_generation = """Key-Type: DSA
                         Key-Length: 1024
@@ -151,13 +161,13 @@ class BuildService
                         Name-Email: acme-iso-generation@example.com
                         Expire-Date: 0
                         %commit"""
-    _, stderr, status = exec_command_chroot "echo '#{key_generation}' | gpg --gen-key --batch",
-                                            "Generating GPG keypair"
+    _, stderr, status = exec_command_chroot command: "echo '#{key_generation}' | gpg --gen-key --batch",
+                                            description: "Generating GPG keypair"
     if status.exitstatus.zero?
       stderr =~ /key ([^\s]+)/
       key = $1
-      exec_command_chroot "echo 'default-key #{key}' >> .gnupg/gpg.conf",
-                          "Setting generated key #{key} as the default signing key"
+      exec_command_chroot command: "echo 'default-key #{key}' >> .gnupg/gpg.conf",
+                          description: "Setting generated key #{key} as the default signing key"
     else
       raise 'error when creating GPG keypair'
     end
@@ -165,8 +175,9 @@ class BuildService
 
   def self.build_images
     Dir.chdir(iso_project_dir) do
-      exec_command "osc build --trust-all-projects images #{generated_kiwi_filename}",
-                   "Building images"
+      exec_command command: "osc build --trust-all-projects images #{generated_kiwi_filename}",
+                   description: "Building images",
+                   print_error: true
     end
   end
 end
