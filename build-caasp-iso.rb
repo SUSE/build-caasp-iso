@@ -65,11 +65,11 @@ class BuildScript
     begin
       File.read cached_file_path(file)
     rescue Errno::ENOENT
-      contents = yield
-      File.open(cached_file_path(file), "w") do |file|
-        file.write contents
+      yield.tap do |contents|
+        File.open(cached_file_path(file), "w") do |file|
+          file.write contents
+        end
       end
-      contents
     end
   end
 end
