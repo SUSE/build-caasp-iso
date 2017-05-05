@@ -136,7 +136,7 @@ class BuildService
     buildinfo_doc = Nokogiri::XML buildinfo
     log "Patching kiwi definition"
     doc.search("//instrepo[@priority < 100]").remove
-    all_paths = buildinfo_doc.xpath("//path").reverse.map do |path|
+    all_paths = buildinfo_doc.xpath("//path").map do |path|
       ["obs://#{path["project"]}", path["repository"]]
     end.uniq
     all_paths.each_with_index do |path_info, i|
