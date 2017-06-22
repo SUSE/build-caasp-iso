@@ -17,10 +17,29 @@ first execution.
 
 ## Executing
 
-As of now, the program does not contain arguments or flags, so it's a raw `ruby build-caasp-iso.rb`.
+You can build the `Devel` version of the ISO by not providing any arguments to the script, that
+would be: `ruby build-caasp-iso.rb`.
 
 The first time it will take some time to download and populate the package cache, but it will be
 much faster on the following builds (~ 1 minute for each build after the first one).
+
+### Overriding packages with your own
+
+You can provide arguments to override the resulting ISO packages with your own on your branches, for
+example:
+
+`ruby build-caasp-iso.rb home:user:branches:Devel:CASP:1.0:ControllerNode/standard:caasp-container-manifests`
+
+In this case, the package `caasp-container-manifests` from the project `home:user:branches:Devel:CASP:1.0:ControllerNode`
+would be used.
+
+You can provide a list of packages following the same format:
+
+```
+ruby build-caasp-iso.rb home:user:branches:Devel:CASP:1.0:ControllerNode/standard:caasp-container-manifests \
+                        home:user:branches:Devel:CASP:1.0:ControllerNode/standard:other-package \
+                        other-project/repo:yet-other-package
+```
 
 ## Local configuration
 

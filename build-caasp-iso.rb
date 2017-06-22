@@ -72,6 +72,40 @@ class BuildScript
       end
     end
   end
+
+  def self.show_repo_args
+    return if repo_args.empty?
+    log "The following packages will be overriden:"
+    repo_args.each do |project|
+      log "  - #{project[:project]} will provide:"
+      project[:package_overrides].each do |package|
+        log "    - #{package}"
+      end
+    end
+  end
+
+  def self.repo_args
+    args.map do |project, repository|
+      {
+        project: project,
+        repository: repository,
+        package_overrides: package_overrides(project: project, repository: repository)
+      }
+    end
+  end
+
+  def self.package_overrides(project:, repository:)
+    ARGV.map do |argv|
+      $1 if argv =~ /^#{project}\/#{repository}:(.*)$/
+    end.reject(&:nil?)
+  end
+
+  def self.args
+    ARGV.map do |argv|
+      argv =~ /^([^\/]+)\/([^:]+)/
+      [$1, $2]
+    end.uniq
+  end
 end
 
 class BuildService
@@ -135,11 +169,14 @@ class BuildService
     doc = Nokogiri::XML File.read(kiwi_file_path)
     buildinfo_doc = Nokogiri::XML buildinfo
     log "Patching kiwi definition"
-    doc.search("//instrepo[@priority < 100]").remove
+    doc.search("//instrepo").remove
     all_paths = buildinfo_doc.xpath("//path").map do |path|
       ["obs://#{path["project"]}", path["repository"]]
     end.uniq
-    all_paths.each_with_index do |path_info, i|
+    custom_paths = BuildScript.repo_args.map do |project|
+      ["obs://#{project[:project]}", project[:repository]]
+    end
+    (all_paths + custom_paths).each_with_index do |path_info, i|
       instrepo = Nokogiri::XML::Builder.with(doc.at_css("instsource")) do |doc|
         doc.instrepo(name: "obsrepository_#{i + 1}", priority: i + 1, local: true) do |instrepo|
           instrepo.source path: File.join(path_info)
@@ -169,13 +206,34 @@ class BuildService
       exec_command_chroot command: "echo 'default-key #{key}' >> .gnupg/gpg.conf",
                           description: "Setting generated key #{key} as the default signing key"
     else
-      raise 'error when creating GPG keypair'
+      raise "error when creating GPG keypair"
     end
+  end
+
+  def self.buildinfo_path
+    File.join iso_project_dir, ".osc", "_buildinfo-images-x86_64.xml"
+  end
+
+  def self.patch_buildinfo
+    doc = Nokogiri::XML File.read(buildinfo_path)
+    log "Patching buildinfo"
+    BuildScript.repo_args.each do |project|
+      project[:package_overrides].each do |package|
+        doc.search("//bdep[@name = '#{package}' and @repository = '#{project[:repository]}' and @project != '#{project[:project]}']").remove
+      end
+    end
+    File.open(buildinfo_path, "w") { |file| file.write doc.to_s }
   end
 
   def self.build_images
     Dir.chdir(iso_project_dir) do
-      exec_command command: "osc build --trust-all-projects images #{generated_kiwi_filename}",
+      exec_command command: "osc build -l --trust-all-projects images #{generated_kiwi_filename}",
+                   description: "Preloading build",
+                   print_error: true
+    end
+    patch_buildinfo
+    Dir.chdir(iso_project_dir) do
+      exec_command command: "osc build -o --trust-all-projects images #{generated_kiwi_filename}",
                    description: "Building images",
                    print_error: true
     end
@@ -189,6 +247,7 @@ class CaaSP
 
   def self.build_iso
     BuildScript.request_sudo
+    BuildScript.show_repo_args
     BuildService.checkout
     BuildService.patch_kiwi
     BuildService.generate_private_key
