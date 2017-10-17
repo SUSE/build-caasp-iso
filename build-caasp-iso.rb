@@ -14,8 +14,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-require "open3"
-require "nokogiri"
+require 'open3'
+require 'nokogiri'
 
 def log(message, command: false)
   if command
@@ -31,42 +31,46 @@ def exec_command(command:, description: nil, stdin: nil, print_error: false)
   stdout, stderr, status = Open3.capture3 command, stdin_data: stdin
   unless description.nil?
     if status.exitstatus.zero?
-      puts " success"
+      puts ' success'
     else
       puts " failed (retcode: #{status})"
       if print_error
         puts "   > command: #{command}"
-        puts "   > stdout:"
-        puts stdout.strip.gsub /^/, "     | "
-        puts "   > stderr:"
-        puts stderr.strip.gsub /^/, "     | "
+        puts '   > stdout:'
+        puts stdout.strip.gsub /^/, '     | '
+        puts '   > stderr:'
+        puts stderr.strip.gsub /^/, '     | '
       end
     end
   end
-  return stdout, stderr, status
+  [stdout, stderr, status]
 end
 
 class BuildScript
   def self.request_sudo
-    log "Requesting sudo"
-    exec_command command: "sudo -v"
+    log 'Requesting sudo'
+    exec_command command: 'sudo -v'
   end
 
   def self.project_dir
-    File.expand_path File.dirname(__FILE__)
+    __dir__
   end
 
   def self.cached_file_path(file)
-    File.join project_dir, ".cache", file
+    File.join project_dir, '.cache', file
   end
 
   def self.cached_file(file)
-    Dir.mkdir File.join(project_dir, ".cache") rescue nil
+    begin
+      Dir.mkdir File.join(project_dir, '.cache')
+    rescue
+      nil
+    end
     begin
       File.read cached_file_path(file)
     rescue Errno::ENOENT
       yield.tap do |contents|
-        File.open(cached_file_path(file), "w") do |file|
+        File.open(cached_file_path(file), 'w') do |file|
           file.write contents
         end
       end
@@ -75,7 +79,7 @@ class BuildScript
 
   def self.show_repo_args
     return if repo_args.empty?
-    log "The following packages will be overriden:"
+    log 'The following packages will be overriden:'
     repo_args.each do |project|
       log "  - #{project[:project]} will provide:"
       project[:package_overrides].each do |package|
@@ -96,14 +100,14 @@ class BuildScript
 
   def self.package_overrides(project:, repository:)
     ARGV.map do |argv|
-      $1 if argv =~ /^#{project}\/#{repository}:(.*)$/
+      Regexp.last_match(1) if argv =~ /^#{project}\/#{repository}:(.*)$/
     end.reject(&:nil?)
   end
 
   def self.args
     ARGV.map do |argv|
       argv =~ /^([^\/]+)\/([^:]+)/
-      [$1, $2]
+      [Regexp.last_match(1), Regexp.last_match(2)]
     end.uniq
   end
 end
@@ -111,12 +115,12 @@ end
 class BuildService
   def self.iso_project_dir
     File.join BuildScript.project_dir,
-              "Devel:CASP:1.0:ControllerNode",
-              "_product:CAASP-dvd5-DVD-x86_64"
+              'Devel:CASP:1.0:ControllerNode',
+              '_product:CAASP-dvd5-DVD-x86_64'
   end
 
   def self.kiwi_filename
-    "CAASP-dvd5-DVD-x86_64.kiwi"
+    'CAASP-dvd5-DVD-x86_64.kiwi'
   end
 
   def self.kiwi_file_path
@@ -124,7 +128,7 @@ class BuildService
   end
 
   def self.generated_kiwi_filename
-    "CAASP-dvd5-DVD-x86_64.generated.kiwi"
+    'CAASP-dvd5-DVD-x86_64.generated.kiwi'
   end
 
   def self.generated_kiwi_file_path
@@ -133,34 +137,35 @@ class BuildService
 
   def self.checkout
     Dir.chdir(BuildScript.project_dir) do
-      unless Dir.exists? "Devel:CASP:1.0:ControllerNode"
-        exec_command command: "osc -A https://api.suse.de co Devel:CASP:1.0:ControllerNode/_product:CAASP-dvd5-DVD-x86_64",
-                     description: "Checking out CaaSP DVD product",
+      unless Dir.exist? 'Devel:CASP:1.0:ControllerNode'
+        exec_command command: 'osc -A https://api.suse.de co Devel:CASP:1.0:ControllerNode/_product:CAASP-dvd5-DVD-x86_64',
+                     description: 'Checking out CaaSP DVD product',
                      print_error: true
       end
     end
   end
 
   def self.chroot_dir
-    "/var/tmp/build-root/images-x86_64"
+    '/var/tmp/build-root/images-x86_64'
   end
 
   def self.exec_command_chroot(command:, description: nil)
-    build_images unless Dir.exists? chroot_dir
+    build_images unless Dir.exist? chroot_dir
     exec_command command: "osc chroot --root=#{chroot_dir}",
                  description: description.nil? ? nil : "(chroot) #{description}",
                  stdin: command
   end
 
   def self.buildinfo
-    BuildScript.cached_file("_product:CAASP-dvd5-DVD-x86_64.buildinfo") do
-      stdout, status = nil, nil
+    BuildScript.cached_file('_product:CAASP-dvd5-DVD-x86_64.buildinfo') do
+      stdout = nil
+      status = nil
       Dir.chdir(iso_project_dir) do
         stdout, _, status = exec_command command: "osc -A https://api.suse.de buildinfo images #{kiwi_filename}",
-                                         description: "Retrieving buildinfo",
+                                         description: 'Retrieving buildinfo',
                                          print_error: true
       end
-      raise "buildinfo could not be retrieved" unless status.exitstatus.zero?
+      raise 'buildinfo could not be retrieved' unless status.exitstatus.zero?
       stdout
     end
   end
@@ -168,73 +173,73 @@ class BuildService
   def self.patch_kiwi
     doc = Nokogiri::XML File.read(kiwi_file_path)
     buildinfo_doc = Nokogiri::XML buildinfo
-    log "Patching kiwi definition"
-    doc.search("//instrepo").remove
-    all_paths = buildinfo_doc.xpath("//path").map do |path|
-      ["obs://#{path["project"]}", path["repository"]]
+    log 'Patching kiwi definition'
+    doc.search('//instrepo').remove
+    all_paths = buildinfo_doc.xpath('//path').map do |path|
+      ["obs://#{path['project']}", path['repository']]
     end.uniq
     custom_paths = BuildScript.repo_args.map do |project|
       ["obs://#{project[:project]}", project[:repository]]
     end
     (all_paths + custom_paths).each_with_index do |path_info, i|
-      instrepo = Nokogiri::XML::Builder.with(doc.at_css("instsource")) do |doc|
+      instrepo = Nokogiri::XML::Builder.with(doc.at_css('instsource')) do |doc|
         doc.instrepo(name: "obsrepository_#{i + 1}", priority: i + 1, local: true) do |instrepo|
           instrepo.source path: File.join(path_info)
         end
       end
     end
-    File.open(generated_kiwi_file_path, "w") { |file| file.write doc.to_s }
+    File.open(generated_kiwi_file_path, 'w') { |file| file.write doc.to_s }
   end
 
   def self.generate_private_key
-    _, _, status = exec_command_chroot command: "grep ^default-key .gnupg/gpg.conf",
-                                       description: "Checking if a default-key exists in GPG configuration"
+    _, _, status = exec_command_chroot command: 'grep ^default-key .gnupg/gpg.conf',
+                                       description: 'Checking if a default-key exists in GPG configuration'
     return if status.exitstatus.zero?
-    key_generation = """Key-Type: DSA
+    key_generation = ''"Key-Type: DSA
                         Key-Length: 1024
                         Subkey-Type: ELG-E
                         Subkey-Length: 1024
                         Name-Real: ACME ISO Generation
                         Name-Email: acme-iso-generation@example.com
                         Expire-Date: 0
-                        %commit"""
+                        %commit"''
     _, stderr, status = exec_command_chroot command: "echo '#{key_generation}' | gpg --gen-key --batch",
-                                            description: "Generating GPG keypair"
+                                            description: 'Generating GPG keypair'
     if status.exitstatus.zero?
       stderr =~ /key ([^\s]+)/
-      key = $1
+      key = Regexp.last_match(1)
       exec_command_chroot command: "echo 'default-key #{key}' >> .gnupg/gpg.conf",
                           description: "Setting generated key #{key} as the default signing key"
     else
-      raise "error when creating GPG keypair"
+      raise 'error when creating GPG keypair'
     end
   end
 
   def self.buildinfo_path
-    File.join iso_project_dir, ".osc", "_buildinfo-images-x86_64.xml"
+    File.join iso_project_dir, '.osc', '_buildinfo-images-x86_64.xml'
   end
 
   def self.patch_buildinfo
     doc = Nokogiri::XML File.read(buildinfo_path)
-    log "Patching buildinfo"
+    log 'Patching buildinfo'
     BuildScript.repo_args.each do |project|
       project[:package_overrides].each do |package|
         doc.search("//bdep[@name = '#{package}' and @repository = '#{project[:repository]}' and @project != '#{project[:project]}']").remove
       end
     end
-    File.open(buildinfo_path, "w") { |file| file.write doc.to_s }
+    File.open(buildinfo_path, 'w') { |file| file.write doc.to_s }
   end
 
   def self.build_images
     Dir.chdir(iso_project_dir) do
       exec_command command: "osc build -l --trust-all-projects images #{generated_kiwi_filename}",
-                   description: "Preloading build",
+                   description: 'Preloading build',
                    print_error: true
     end
     patch_buildinfo
     Dir.chdir(iso_project_dir) do
       exec_command command: "osc build -o --trust-all-projects images #{generated_kiwi_filename}",
-                   description: "Building images",
+                   description: 'Building images',
                    print_error: true
     end
   end
@@ -242,7 +247,7 @@ end
 
 class CaaSP
   def self.iso_path
-    "/var/tmp/build-root/images-x86_64/usr/src/packages/KIWI/SUSE-CaaS-Platform-1.0-DVD-x86_641.iso"
+    '/var/tmp/build-root/images-x86_64/usr/src/packages/KIWI/SUSE-CaaS-Platform-1.0-DVD-x86_641.iso'
   end
 
   def self.build_iso
@@ -252,7 +257,7 @@ class CaaSP
     BuildService.patch_kiwi
     BuildService.generate_private_key
     BuildService.build_images
-    if File.exists? iso_path
+    if File.exist? iso_path
       log "Please, find your ISO located at #{iso_path}"
     else
       log "ISO image couldn't be found at #{iso_path}. Something went wrong, sorry..."
