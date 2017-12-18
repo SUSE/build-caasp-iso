@@ -26,7 +26,7 @@ def log(message, command: false)
   end
 end
 
-def exec_command(command:, description: nil, stdin: nil, print_error: false)
+def exec_command(command:, description: nil, stdin: nil, print_error: true)
   log description, command: true unless description.nil?
   stdout, stderr, status = Open3.capture3 command, stdin_data: stdin
   unless description.nil?
@@ -109,32 +109,46 @@ class BuildScript
 end
 
 class BuildService
-  def self.iso_project_dir
-    File.join BuildScript.project_dir,
-              "Devel:CASP:1.0:ControllerNode",
-              "_product:CAASP-dvd5-DVD-x86_64"
+  def self.project_name
+    case ENV["TARGET"]
+    when "dvd" then "CAASP-dvd5-DVD-x86_64"
+    when "image" then "SUSE_CaaS_Platform-2.0-for-KVM-and-Xen"
+    end
   end
 
   def self.kiwi_filename
-    "CAASP-dvd5-DVD-x86_64.kiwi"
+    "#{project_name}.kiwi"
+  end
+
+  def self.product_name
+    case ENV["TARGET"]
+    when "dvd" then "_product:#{project_name}"
+    when "image" then project_name
+    end
+  end
+
+  def self.project_dir
+    File.join BuildScript.project_dir,
+              "Devel:CASP:Head:ControllerNode",
+              product_name
   end
 
   def self.kiwi_file_path
-    File.join BuildService.iso_project_dir, kiwi_filename
+    File.join BuildService.project_dir, kiwi_filename
   end
 
   def self.generated_kiwi_filename
-    "CAASP-dvd5-DVD-x86_64.generated.kiwi"
+    "#{project_name}.generated.kiwi"
   end
 
   def self.generated_kiwi_file_path
-    File.join BuildService.iso_project_dir, generated_kiwi_filename
+    File.join BuildService.project_dir, generated_kiwi_filename
   end
 
   def self.checkout
     Dir.chdir(BuildScript.project_dir) do
-      unless Dir.exists? "Devel:CASP:1.0:ControllerNode"
-        exec_command command: "osc -A https://api.suse.de co Devel:CASP:1.0:ControllerNode/_product:CAASP-dvd5-DVD-x86_64",
+      unless Dir.exists? "Devel:CASP:Head:ControllerNode"
+        exec_command command: "osc -A https://api.suse.de co Devel:CASP:Head:ControllerNode/#{product_name}",
                      description: "Checking out CaaSP DVD product",
                      print_error: true
       end
@@ -147,15 +161,15 @@ class BuildService
 
   def self.exec_command_chroot(command:, description: nil)
     build_images unless Dir.exists? chroot_dir
-    exec_command command: "osc chroot --root=#{chroot_dir}",
+    exec_command command: "osc chroot --login-as-root --root=#{chroot_dir}",
                  description: description.nil? ? nil : "(chroot) #{description}",
                  stdin: command
   end
 
   def self.buildinfo
-    BuildScript.cached_file("_product:CAASP-dvd5-DVD-x86_64.buildinfo") do
+    BuildScript.cached_file("#{product_name}.buildinfo") do
       stdout, status = nil, nil
-      Dir.chdir(iso_project_dir) do
+      Dir.chdir(project_dir) do
         stdout, _, status = exec_command command: "osc -A https://api.suse.de buildinfo images #{kiwi_filename}",
                                          description: "Retrieving buildinfo",
                                          print_error: true
@@ -211,7 +225,7 @@ class BuildService
   end
 
   def self.buildinfo_path
-    File.join iso_project_dir, ".osc", "_buildinfo-images-x86_64.xml"
+    File.join project_dir, ".osc", "_buildinfo-images-x86_64.xml"
   end
 
   def self.patch_buildinfo
@@ -226,23 +240,25 @@ class BuildService
   end
 
   def self.build_images
-    Dir.chdir(iso_project_dir) do
-      exec_command command: "osc build -l --trust-all-projects images #{generated_kiwi_filename}",
+    res = nil
+    Dir.chdir(project_dir) do
+      exec_command command: "osc build -l --userootforbuild --trust-all-projects images #{generated_kiwi_filename}",
                    description: "Preloading build",
                    print_error: true
     end
     patch_buildinfo
-    Dir.chdir(iso_project_dir) do
-      exec_command command: "osc build -o --trust-all-projects images #{generated_kiwi_filename}",
-                   description: "Building images",
-                   print_error: true
+    Dir.chdir(project_dir) do
+      _, _, res = exec_command command: "osc build -o --userootforbuild --trust-all-projects images #{generated_kiwi_filename}",
+                               description: "Building images",
+                               print_error: true
     end
+    res.exitstatus.zero?
   end
 end
 
 class CaaSP
   def self.iso_path
-    "/var/tmp/build-root/images-x86_64/usr/src/packages/KIWI/SUSE-CaaS-Platform-1.0-DVD-x86_641.iso"
+    "/var/tmp/build-root/images-x86_64/usr/src/packages/KIWI/"
   end
 
   def self.build_iso
@@ -251,12 +267,14 @@ class CaaSP
     BuildService.checkout
     BuildService.patch_kiwi
     BuildService.generate_private_key
-    BuildService.build_images
-    if File.exists? iso_path
+    if BuildService.build_images
       log "Please, find your ISO located at #{iso_path}"
     else
-      log "ISO image couldn't be found at #{iso_path}. Something went wrong, sorry..."
+      log "ISO image couldn't be built. Something went wrong, sorry..."
     end
+  end
+
+  def self.build_kvm
   end
 end
 
