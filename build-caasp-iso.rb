@@ -78,8 +78,12 @@ class BuildScript
     log "The following packages will be overriden:"
     repo_args.each do |project|
       log "  - #{project[:project]} will provide:"
-      project[:package_overrides].each do |package|
-        log "    - #{package}"
+      project[:package_overrides].each do |package, package_buildinfo_name|
+        if package_buildinfo_name
+          log "    - #{package} as #{package_buildinfo_name}"
+        else
+          log "    - #{package}"
+        end
       end
     end
   end
@@ -96,8 +100,8 @@ class BuildScript
 
   def self.package_overrides(project:, repository:)
     ARGV.map do |argv|
-      $1 if argv =~ /^#{project}\/#{repository}:(.*)$/
-    end.reject(&:nil?)
+      [$1, $3] if argv =~ /^#{project}\/#{repository}:([^:]+)(:(.+))?$/
+    end.reject { |package| package.first.nil? }
   end
 
   def self.args
@@ -147,7 +151,7 @@ class BuildService
 
   def self.checkout
     Dir.chdir(BuildScript.project_dir) do
-      unless Dir.exists? "Devel:CASP:Head:ControllerNode"
+      unless Dir.exists? project_dir
         exec_command command: "osc -A https://api.suse.de co Devel:CASP:Head:ControllerNode/#{product_name}",
                      description: "Checking out CaaSP DVD product",
                      print_error: true
@@ -232,7 +236,8 @@ class BuildService
     doc = Nokogiri::XML File.read(buildinfo_path)
     log "Patching buildinfo"
     BuildScript.repo_args.each do |project|
-      project[:package_overrides].each do |package|
+      project[:package_overrides].each do |package, package_buildinfo_name|
+        package = package_buildinfo_name || package
         doc.search("//bdep[@name = '#{package}' and @repository = '#{project[:repository]}' and @project != '#{project[:project]}']").remove
       end
     end
@@ -272,9 +277,6 @@ class CaaSP
     else
       log "ISO image couldn't be built. Something went wrong, sorry..."
     end
-  end
-
-  def self.build_kvm
   end
 end
 
